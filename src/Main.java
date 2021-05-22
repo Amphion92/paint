@@ -12,86 +12,24 @@ import java.util.List;
 
 
 public class Main {
-    static List<List<Point>> drawnLines = new ArrayList<>();
-    volatile static List<Color> colors = new ArrayList<>();
-    volatile static List<Integer> widths = new ArrayList<>();
-    static Set<Point> pointSet = new HashSet<>();
-    static boolean isPressed = false;
     static JSlider slider = new JSlider(0, 30, 5);
     static JSlider rSlider = new JSlider(0, 255, 0);
     static JSlider gSlider = new JSlider(0, 255, 0);
     static JSlider bSlider = new JSlider(0, 255, 0);
     static JPanel colorIndicator = new JPanel();
     static JFrame frame = new JFrame();
-    static Color currColor = Color.BLACK;
 
-    public static void save(JLabel panel) throws IOException {
-        BufferedImage img = new BufferedImage(panel.getWidth(), panel.getHeight(), BufferedImage.TYPE_INT_RGB);
-        FileDialog fileDialog = new FileDialog(frame);
-        fileDialog.setMode(FileDialog.SAVE);
-        fileDialog.setFile("*.jpg");
-        fileDialog.setFilenameFilter((File dir, String name) -> name.endsWith(".jpg"));
-        fileDialog.setVisible(true);
-        String name = fileDialog.getFile();
-        String dir = fileDialog.getDirectory();
-        System.out.println("name " + name);
-        System.out.println("dir " + dir);
-        panel.printAll(img.getGraphics());
-        ImageIO.write(img, "JPEG", new File(dir, name));
-    }
 
     public static void main(String[] args) {
         Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
         frame.setBounds(screenSize.width / 4, screenSize.height / 4, screenSize.width / 2, screenSize.height / 2);
-        JLabel pane = new JLabel() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                g.setColor(Color.BLACK);
-                for (int j = 0; j < drawnLines.size(); j++) {
-                    List<Point> line = drawnLines.get(j);
-                    int w = widths.get(j);
-                    Color color = colors.get(j);
-                    ((Graphics2D) g).setStroke(new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_MITER));
-                    ((Graphics2D) g).setColor(color);
-                    for (int i = 0, pointsSize = line.size(); i < pointsSize - 1; i++) {
-                        Point p = line.get(i);
-                        Point nextP = line.get(i + 1);
-                        g.drawLine(p.x, p.y, nextP.x, nextP.y);
-                    }
-                }
-            }
-        };
-
-        pane.addMouseMotionListener(new MouseMotionAdapter() {
-            @Override
-            public void mouseDragged(MouseEvent e) {
-                if (!pointSet.contains(e.getPoint())) {
-                    drawnLines.get(drawnLines.size() - 1).add(e.getPoint());
-                    pointSet.add(e.getPoint());
-                    pane.repaint();
-                }
-                super.mouseDragged(e);
-            }
-        });
-        pane.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                Main.isPressed = true;
-                Main.drawnLines.add(new ArrayList<>());
-                Main.colors.add(currColor);
-                Main.widths.add(slider.getValue());
-                super.mousePressed(e);
-            }
-
-            @Override
-            public void mouseReleased(MouseEvent e) {
-                Main.isPressed = false;
-                super.mouseReleased(e);
-            }
+        JPanel box = new JPanel();
+        ImageEditor imageEditor = new ImageEditor(box);
+        slider.addChangeListener(e -> {
+            imageEditor.setWidth(slider.getValue());
         });
         frame.getContentPane().setLayout(new BorderLayout());
-        frame.getContentPane().add(pane, BorderLayout.CENTER);
+        frame.getContentPane().add(box, BorderLayout.CENTER);
         JPanel properties = new JPanel();
         properties.setBorder(BorderFactory.createLineBorder(Color.BLACK));
         frame.getContentPane().add(properties, BorderLayout.EAST);
@@ -101,24 +39,30 @@ public class Main {
         JButton saveButt = new JButton("Сохранить");
         saveButt.addActionListener(e -> {
             try {
-                save(pane);
+                FileDialog fileDialog = new FileDialog(frame);
+                fileDialog.setMode(FileDialog.SAVE);
+                fileDialog.setFile("*.jpg");
+                fileDialog.setFilenameFilter((File dir, String name) -> name.endsWith(".jpg"));
+                fileDialog.setVisible(true);
+                String name = fileDialog.getFile();
+                String dir = fileDialog.getDirectory();
+                System.out.println("name " + name);
+                System.out.println("dir " + dir);
+                imageEditor.save(new File(dir, name).getPath());
             } catch (IOException ioException) {
                 ioException.printStackTrace();
+            } catch (NullPointerException exception) {
+                System.out.println("Нету файла.");
             }
         });
         properties.add(saveButt);
         JButton clearButt = new JButton("Очистить");
         ActionListener clearAct = e -> {
-            drawnLines = new ArrayList<>();
-            pointSet = new HashSet<>();
-            widths = new ArrayList<>();
-            colors = new ArrayList<>();
-            pane.repaint();
+            imageEditor.clear();
             colorIndicator.setBackground(Color.BLACK);
             rSlider.setValue(0);
             gSlider.setValue(0);
             bSlider.setValue(0);
-            pane.setIcon(null);
         };
         clearButt.addActionListener(clearAct);
         properties.add(clearButt);
@@ -132,12 +76,13 @@ public class Main {
         colorPnl.add(bSlider);
         ChangeListener act = e -> {
             try {
-                currColor = new Color(
+                Color color = new Color(
                         rSlider.getValue(),
                         gSlider.getValue(),
                         bSlider.getValue()
                 );
-                colorIndicator.setBackground(currColor);
+                imageEditor.setColor(color);
+                colorIndicator.setBackground(color);
                 colorIndicator.repaint();
             } catch (IllegalArgumentException ex) {
                 rSlider.setValue(0);
@@ -162,9 +107,7 @@ public class Main {
                 String dir = fileDialog.getDirectory();
                 System.out.println("name " + name);
                 System.out.println("dir " + dir);
-                pane.setVerticalAlignment(SwingConstants.TOP);
-                pane.setHorizontalAlignment(SwingConstants.LEFT);
-                pane.setIcon(new ImageIcon(new File(dir, name).getPath()));
+                imageEditor.loadImage(new File(dir, name).getPath());
             } catch (NullPointerException ex) {
                 clearAct.actionPerformed(e);
             }
@@ -172,5 +115,124 @@ public class Main {
         properties.add(open);
         properties.setPreferredSize(new Dimension(frame.getWidth() / 4, frame.getHeight()));
         frame.setVisible(true);
+    }
+}
+
+
+class ImageEditor {
+    private List<List<Point>> drawnLines = new ArrayList<>();
+    private List<Color> colors = new ArrayList<>();
+    private List<Integer> widths = new ArrayList<>();
+    private Set<Point> pointSet = new HashSet<>();
+    private Color currColor = Color.BLACK;
+    private boolean isPressed = false;
+    private int width = 5;
+    private double scale = 1.0;
+    private ImageIcon sourceIcon = null;
+
+    public void setColor(Color color) {
+        currColor = color;
+    }
+
+    public void setWidth(int width) {
+        this.width = width;
+    }
+
+    private void setScale(double scale) {
+        this.scale = scale;
+        if (sourceIcon != null)
+            pane.setIcon(new ImageIcon(sourceIcon.getImage().getScaledInstance((int) (sourceIcon.getIconWidth() * scale),
+                    (int) (sourceIcon.getIconHeight() * scale)
+                    , Image.SCALE_FAST)));
+        pane.repaint();
+        pane.setSize(pane.getParent().getSize());
+    }
+
+    private JLabel pane = new JLabel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            g.setColor(Color.BLACK);
+            ((Graphics2D) g).setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            for (int j = 0; j < drawnLines.size(); j++) {
+                List<Point> line = drawnLines.get(j);
+                int w = (int)(widths.get(j) * scale);
+                Color color = colors.get(j);
+                ((Graphics2D) g).setStroke(new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_MITER));
+                ((Graphics2D) g).setColor(color);
+                for (int i = 0, pointsSize = line.size(); i < pointsSize - 1; i++) {
+                    Point p = line.get(i);
+                    Point nextP = line.get(i + 1);
+                    g.drawLine((int) (scale * p.x), (int) (scale * p.y), (int) (scale * nextP.x), (int) (scale * nextP.y));
+                }
+            }
+        }
+    };
+
+
+    public ImageEditor(Container parent) {
+        pane.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (!pointSet.contains(e.getPoint())) {
+                    drawnLines.get(drawnLines.size() - 1).add(new Point((int) (e.getPoint().getX()/scale), (int) (e.getPoint().getY()/scale)));
+                    pointSet.add(e.getPoint());
+                    pane.repaint();
+                }
+                super.mouseDragged(e);
+            }
+        });
+        pane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                isPressed = true;
+                drawnLines.add(new ArrayList<>());
+                colors.add(currColor);
+                widths.add(width);
+                super.mousePressed(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                isPressed = false;
+                super.mouseReleased(e);
+            }
+        });
+        pane.addMouseWheelListener(new MouseWheelListener() {
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                if (e.getWheelRotation() < 0)
+                    setScale(scale * 1.1);
+                else setScale(scale * 0.8);
+            }
+        });
+        parent.removeAll();
+        parent.setLayout(new BorderLayout());
+        parent.add(pane, BorderLayout.CENTER);
+    }
+
+    public void clear() {
+        scale = 1.0;
+        drawnLines = new ArrayList<>();
+        pointSet = new HashSet<>();
+        widths = new ArrayList<>();
+        colors = new ArrayList<>();
+        pane.repaint();
+        pane.setIcon(null);
+        sourceIcon = null;
+    }
+
+    public void loadImage(String path) {
+        pane.setVerticalAlignment(SwingConstants.TOP);
+        pane.setHorizontalAlignment(SwingConstants.LEFT);
+        sourceIcon = new ImageIcon(path);
+        setScale(scale);
+
+    }
+
+    public void save(String path) throws IOException {
+        BufferedImage img = new BufferedImage(pane.getWidth(), pane.getHeight(), BufferedImage.TYPE_INT_RGB);
+        pane.printAll(img.getGraphics());
+        ImageIO.write(img, "JPEG", new File(path));
     }
 }
